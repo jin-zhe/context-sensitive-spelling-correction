@@ -1,80 +1,97 @@
+import static library.Helpers.P;
+
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
+/**
+ * @author Jin Zhe (A0086894H)
+ */
 public class Features implements Serializable{
 	/**
    * Generated serialization ID
    */
   private static final long serialVersionUID = 440984463827695422L;
   /* offset constants for collocation */
-	public static final int C_i = -2;
-	public static final int C_j = -1;
+	public static final int C_i = 1;
+	public static final int C_j = 2;
 	/* stopwords  */
-	public static final String STOPWORD_LIST = "./resources/stopwords.txt";
+	public static final String STOPWORD_LIST = "./resources/stopwd.txt";
 	public static HashSet<String> stopwords;
 	/* instance variables */
-	public String[] surroundingWords;	// features list for surrounding words
-	public String[] collocations;			// features list for collocation sequences
+	public boolean ignoreStopwords;             // if stopwords are to be ignore
+	public int dfThreshold;                     // minimum df to qualify as a feature
+	public ArrayList<String> surroundingWords;	// features list for surrounding words
+	public ArrayList<String> collocations;			// features list for collocation sequences
 	int vectorLength;									// total length of feature vector
 	
 	/* ########################### instance methods ########################### */
 	
 	/**
 	 * Constructor
-	 * @param surroundingWordsSet
-	 * @param collocationsSet
+   * @param surroundingWordsMap key: word, value: df
+   * @param collocationsMap     key: word, value: df
+   * @param ignoreStopwords     toggle to indicate stopwording
+   * @param dfThreshold         df filter
 	 */
-	public Features(HashSet<String> surroundingWordsSet,
-									HashSet<String> collocationsSet) {
-		surroundingWords = new String[surroundingWordsSet.size()];
-		collocations = new String[collocationsSet.size()];
+	public Features(HashMap<String, Integer> surroundingWordsMap,
+									HashMap<String, Integer> collocationsMap,
+									boolean ignoreStopwords, int dfThreshold) {
+		this.ignoreStopwords = ignoreStopwords;
+		this.dfThreshold = dfThreshold;
+
+    /* populate surroundingWords ands collocations features list */
+    this.surroundingWords = featureSelection(surroundingWordsMap);
+    this.collocations = featureSelection(collocationsMap);
 		
-		/* populate surroundingWords features list */
-		int i = 0;
-		for (String str: surroundingWordsSet) {
-			surroundingWords[i] = str;
-			i++;
-		}
-		
-		/* populate collocations features list */
-		i = 0;
-		for (String str: collocationsSet) {
-			collocations[i] = str;
-			i++;
-		}
-		
-		vectorLength = surroundingWords.length + collocations.length;
+		vectorLength = surroundingWords.size() + collocations.size();
+	}
+	
+	/**
+	 * gets the feature list from the given map by applying stopwording and
+	 * df threshold filters
+	 * @param map  key: word, value: df
+	 * @return     feature list produced from the map
+	 */
+	private ArrayList<String> featureSelection(HashMap<String, Integer> map) {
+	  ArrayList<String> featureList = new ArrayList<String> (map.size());
+	   for (Map.Entry<String, Integer> entry : map.entrySet()) {
+	      String word = entry.getKey();
+	      int df = entry.getValue();
+	      if (ignoreStopwords && isStopWord(word)) continue;
+	      if (df < dfThreshold) continue;
+	      featureList.add(word);
+	    }
+	   return featureList;
 	}
 	
 	/**
 	 * returns the feature vector given the features
 	 * @param surroundingWordsMap	surrounding words feature
 	 * @param collocationsMap			collocation feature
-	 * @return
+	 * @return                    feature vector
 	 */
 	public Integer[] getFeatureVector(HashMap<String, Integer> surroundingWordsMap,
 																    String collocation) {
 	  Integer[] featureVector = new Integer[vectorLength];
 		/* populate feature vector from surrounding words */
-		for (int i=0; i<surroundingWords.length; i++) {
-			String word = surroundingWords[i];
+		for (int i=0; i<surroundingWords.size(); i++) {
+			String word = surroundingWords.get(i);
 			if (surroundingWordsMap.containsKey(word))
 				featureVector[i] = surroundingWordsMap.get(word);
 			else featureVector[i] = 0;
 		}
 		
 		/* populate feature vector from collocations */
-		int offset = surroundingWords.length;
-		for (int i=0; i<collocations.length; i++) {
-			String feature = collocations[i];
+		int offset = surroundingWords.size();
+		for (int i=0; i<collocations.size(); i++) {
+			String feature = collocations.get(i);
 			if (collocation.equals(feature)) featureVector[offset + i] = 1;
 			else featureVector[offset + i] = 0;
 		}
@@ -83,20 +100,23 @@ public class Features implements Serializable{
 	
 	public String toString() {
 		return  vectorLength + " features\nSurrounding words:\n" +
-		        Arrays.toString(surroundingWords) + "\n" + "Collocations:\n" +
-		        Arrays.toString(collocations);
+		        surroundingWords + "\n" + "Collocations:\n" + collocations;
 	}
 	
 	/* ############################ class methods  ############################ */
+	
+	public static String getClassification(Integer[] featureVector, Double[] weightVector,
+	                                       String word1, String word2) {
+	  double prob1 = P(1, featureVector, weightVector);
+	  return (prob1 > 0.5)? word1: word2;
+	}
 	
 	private static void loadStopwords() {
 		stopwords = new HashSet<String>();
 		try {
       BufferedReader bf = new BufferedReader(new FileReader(STOPWORD_LIST));
       String line;
-      while ((line = bf.readLine()) != null) {
-        stopwords.add(line.split("'")[0]);
-      }
+      while ((line = bf.readLine()) != null) stopwords.add(line);
       bf.close();
     } catch (IOException e) {
       e.printStackTrace();
@@ -143,8 +163,8 @@ public class Features implements Serializable{
 	 * @param tokens
 	 * @return	list of tokens
 	 */
-	public static ArrayList<String> getSurroundingWords(String[] tokens) throws IOException {
-		ArrayList<String> surroundingWords = new ArrayList<String> ();
+	public static HashSet<String> getSurroundingWordsSet(String[] tokens) throws IOException {
+		HashSet<String> surroundingWordsSet = new HashSet<String> ();
 		for (int i=1; i<tokens.length; i++) {
 			String token = tokens[i];
 			/* if ">>", we skip to the token after "<<" */
@@ -152,28 +172,42 @@ public class Features implements Serializable{
 				if (isIndicator(tokens[i+1])) i += 2;				// if testing line tokens
 				else if (isIndicator(tokens[i+2])) i += 3;	// if training line tokens
 			}
-			/* only add non-stop words and non-punctuations to surrounding words */
-			else if (!isStopWord(token) && !isPunctuation(token))
-				surroundingWords.add(token.toLowerCase());
+			if (isPunctuation(token)) continue;
+			else surroundingWordsSet.add(token.toLowerCase());
 		}
-		return surroundingWords;
+		return surroundingWordsSet;
 	}
 	
 	/**
 	 * given tokens list and origin position, get the collocation string defined
 	 * by C_i and C_j
-	 * @param tokens	tokens list
-	 * @param pos
-	 * @return
+	 * @param tokens	 tokens list
+	 * @param lip      left indicator position
+	 * @param isTrain  if tokens is a training sentence (otherwise test)
+	 * @return         collocation sequence
 	 */
-	public static String getCollocation(String[] tokens, int pos) {
+	@SuppressWarnings("unused")
+  public static String getCollocation(String[] tokens, int lip, boolean isTrain) {
 		StringBuffer sb = new StringBuffer();
-		int i = pos + C_i;
-		int j = pos + C_j;
+		int i; 
+		int j;
+		/* if collocation on LHS */
+		if (C_j < 0) {
+	    i = lip + C_i;
+	    j = lip + C_j;
+		}
+		/* else collocation on RHS */
+		else {
+		  int rip;
+		  if (isTrain) rip = lip + 2;
+		  else rip = lip + 1;
+      i = rip + C_i;
+      j = rip + C_j;		  
+		}
 		for (int k=i; k<=j; k++) {
-			if (k <= 0) sb.append("#");								// if out of sentence bounds
-			else sb.append(tokens[k].toLowerCase());	// else add token to collocation
-			if (k != j) sb.append(" ");								// append space delimiter if not last word
+			if (k <= 0 || k>=tokens.length) sb.append("#");  // if out of sentence bounds
+			else sb.append(tokens[k].toLowerCase());         // else add token to collocation
+			if (k != j) sb.append(" ");						           // append space delimiter if not last word
 		}
 		return sb.toString();
 	}

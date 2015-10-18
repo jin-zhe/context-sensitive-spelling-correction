@@ -1,10 +1,25 @@
 package library;
-
-import java.io.FileOutputStream;
+/**
+ * @author Jin Zhe (A0086894H)
+ */
 import java.io.IOException;
-import java.io.ObjectOutputStream;
+import java.io.PrintWriter;
+import java.util.HashMap;
 
 public class Helpers {
+  
+  /**
+   * updates a count hashmap with the given word 
+   * @param map   hashmap to be updated
+   * @param word  word to be added
+   */
+  public static void updateHashMap(HashMap<String, Integer> map, String word) {
+    if (!map.containsKey(word))
+      map.put(word, 1);
+    else {
+      map.put(word, 1 + map.get(word));
+    }
+  }
   
   /**
    * returns the probability of class y given featureVector and weightVector
@@ -49,15 +64,15 @@ public class Helpers {
 	}
 	
 	 /**
-   * Writes data to given output path to disk
-   * @param data    byte array for data
+   * writes lines to given output path to disk
+   * @param lines   array of lines
    * @param outPath absolute output path
    */
-  public static void writeFile(byte[] data, String outPath) {
+  public static void writeFile(String[] lines, String outPath) {
     try {
-      FileOutputStream fos = new FileOutputStream(outPath); 
-      fos.write(data);
-      fos.close();
+      PrintWriter pw = new PrintWriter(outPath);
+      for (String line: lines) pw.write(line);
+      pw.close();
     } catch (IOException e) {
       e.printStackTrace();
     }
